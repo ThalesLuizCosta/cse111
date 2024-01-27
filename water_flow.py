@@ -1,35 +1,68 @@
-import math
-import pytest
-from pytest import approx
+EARTH_ACCELERATION_OF_GRAVITY = 9.8066500
+WATER_DENSITY = 998.2
+WATER_DYNAMIC_VISCOSITY = 0.0010016
 
-WATER_DENSITY = 998.2 # kg/m3
-GRAVITY = 9.80665 # m/s2
-
+def pressure_loss_from_fittings(fluid_velocity, quantity_fittings):
+    p = (-0.04 * WATER_DENSITY * fluid_velocity**2 * quantity_fittings / 2000)
+    return p
+def reynolds_number(hydraulic_diameter, fluid_velocity):
+    R = (WATER_DENSITY * hydraulic_diameter * fluid_velocity / WATER_DYNAMIC_VISCOSITY)
+    return R
+def pressure_loss_from_pipe_reduction(larger_diameter, fluid_velocity, reynolds_number, smaller_diameter): 
+    k = (0.1 + 50 / reynolds_number) * ((larger_diameter / smaller_diameter)**4 - 1) 
+    P = (-k * WATER_DENSITY * fluid_velocity**2) / 2000
+    return P
 def water_column_height(tower_height, tank_height):
-  total_height = tower_height + tank_height
-  return total_height
+    h = tower_height + (3 * tank_height / 4)
+    return h
+def pressure_gain_from_water_height(height):
+    pressure = (WATER_DENSITY * EARTH_ACCELERATION_OF_GRAVITY * height) / 1000
+    return pressure
+def pressure_loss_from_pipe(pipe_diameter, pipe_length, friction_factor, fluid_velocity):
+    pressure_loss = (-friction_factor * pipe_length * WATER_DENSITY * fluid_velocity**2) / (2000 * pipe_diameter)
+    return pressure_loss
 
-def pressure_gain_water_height(total_height):
-  pressure = WATER_DENSITY * GRAVITY * total_height
-  return pressure
 
-def pipe_friction_loss(pipe_diameter, pipe_length, friction_factor, fluid_velocity):
-  pressure_loss = friction_factor * pipe_length / pipe_diameter * 0.5 * WATER_DENSITY * fluid_velocity ** 2
-  return pressure_loss
+PVC_SCHED80_INNER_DIAMETER = 0.28687 # (meters)  11.294 inches
+PVC_SCHED80_FRICTION_FACTOR = 0.013  # (unitless)
+SUPPLY_VELOCITY = 1.65               # (meters / second)
 
-def test_water_column_height():
-  assert water_column_height(10, 5) == approx(15, abs=0.001)
-  assert water_column_height(20, 10) == approx(30, abs=0.001)
-  assert water_column_height(5, 2) == approx(7, abs=0.001)
+HDPE_SDR11_INNER_DIAMETER = 0.048692 # (meters)  1.917 inches
+HDPE_SDR11_FRICTION_FACTOR = 0.018   # (unitless)
+HOUSEHOLD_VELOCITY = 1.75            # (meters / second)
 
-def test_pressure_gain_water_height():
-  assert pressure_gain_water_height(15) == approx(147.1, abs=0.1)
-  assert pressure_gain_water_height(30) == approx(294.3, abs=0.1)
-  assert pressure_gain_water_height(7) == approx(68.6, abs=0.1)
 
-def test_pipe_friction_loss():
-  assert pipe_friction_loss(0.1, 100, 0.02, 2) == approx(-39.7, abs=0.1)
-  assert pipe_friction_loss(0.05, 50, 0.04, 1) == approx(-31.8, abs=0.1)
-  assert pipe_friction_loss(0.01, 10, 0.08, 0.5) == approx(-9.9, abs=0.1)
+def main():
+    tower_height = float(input("Height of water tower (meters): "))
+    tank_height = float(input("Height of water tank walls (meters): "))
+    length1 = float(input("Length of supply pipe from tank to lot (meters): "))
+    quantity_angles = int(input("Number of 90° angles in supply pipe: "))
+    length2 = float(input("Length of pipe from supply to house (meters): "))
 
-pytest.main(["-v", "--tb=line", "-rN", __file__])
+    water_height = water_column_height(tower_height, tank_height)
+    pressure = pressure_gain_from_water_height(water_height)
+
+    diameter = PVC_SCHED80_INNER_DIAMETER
+    friction = PVC_SCHED80_FRICTION_FACTOR
+    velocity = SUPPLY_VELOCITY
+    reynolds = reynolds_number(diameter, velocity)
+    loss = pressure_loss_from_pipe(diameter, length1, friction, velocity)
+    pressure += loss
+
+    loss = pressure_loss_from_fittings(velocity, quantity_angles)
+    pressure += loss
+
+    loss = pressure_loss_from_pipe_reduction(diameter,velocity, reynolds, HDPE_SDR11_INNER_DIAMETER)
+    pressure += loss
+
+    diameter = HDPE_SDR11_INNER_DIAMETER
+    friction = HDPE_SDR11_FRICTION_FACTOR
+    velocity = HOUSEHOLD_VELOCITY
+    loss = pressure_loss_from_pipe(diameter, length2, friction, velocity)
+    pressure += loss
+
+    print(f"Pressure at house: {pressure:.1f} kilopascals")
+
+
+if __name__ == "__main__":
+    main()
